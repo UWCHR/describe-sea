@@ -1,0 +1,11 @@
+.*
+~$*
+!/.gitignore
+!/.gitattributes
+*.pdf
+.DS_Store
+.Rproj.user
+*.Rproj
+*.html
+*.xlsx
+import/input/*
