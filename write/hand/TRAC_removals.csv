@@ -1,0 +1,21 @@
+fiscal_year,total_decisions,removal_order,voluntary_departure,pct_removal_vd,group
+2021,586,412,16,0.73,Tacoma
+2022,534,310,21,0.62,Tacoma
+2023,863,516,118,0.73,Tacoma
+2024,673,426,89,0.77,Tacoma
+2021,"28,564",13078,2007,0.53,Nationwide detained
+2022,"36,835",15073,1488,0.45,Nationwide detained
+2023,"66,005",20739,2969,0.36,Nationwide detained
+2024,"66,765","21,181",2853,0.36,Nationwide detained
+2021,"148,662",38020,5084,0.29,Nationwide all
+2022,434276,111847,6290,0.27,Nationwide all
+2023,674155,236849,8836,0.36,Nationwide all
+2024,676616,220861,6301,0.34,Nationwide all
+2021,2038,671,93,0.37,Seattle
+2022,5693,1890,153,0.36,Seattle
+2023,6889,2740,174,0.42,Seattle
+2024,7838,2871,66,0.37,Seattle
+2021,"120,098",24942,3077,0.23,Nationwide non-detained
+2022,"397,441",96774,4802,0.26,Nationwide non-detained
+2023,"608,150",216110,5867,0.37,Nationwide non-detained
+2024,"609,851","199,680",3448,0.33,Nationwide non-detained

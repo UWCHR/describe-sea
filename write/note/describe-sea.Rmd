@@ -1,0 +1,1364 @@
+---
+title: Descriptive analysis of tends in immigration enforcement in the Pacific Northwest
+author:
+- "[University of Washington Center for Human Rights](https://github.com/UWCHR)"
+date: 28 August, 2024
+output:
+    html_document:
+        html_preview: true
+        toc: true
+        toc_depth: 3
+        toc_float: true
+        code_folding: hide
+---
+
+```{r setup, include=FALSE}
+
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+options(scipen = 1000000)
+
+pacman::p_load(tidyverse, arrow, ggplot2, plotly, zoo, here)
+
+i213 <- read_delim(here('write', 'input', 'uw-chr-i213-public.csv.gz'), delim = '|')
+
+kww_date <- as.Date('2019-05-21')
+spa_date <- as.Date('2021-09-25')
+specific_area_of_responsibility <- "Seattle Area of Responsibility"
+specific_aor <- "SEA"
+
+date_to_text <- function(date) {
+  date = as.Date(date)
+  m <- month(date, label = TRUE, abbr = FALSE)
+  d <- day(date)
+  y <- year(date)
+  date_text <- paste0(m, ' ', d, ', ', y)
+  return(date_text)
+}
+
+year_mon_to_text <- function(date) {
+  date = as.Date(date)
+  m <- month(date, label = TRUE, abbr = FALSE)
+  y <- year(date)
+  date_text <- paste0(m, ' ', y)
+  return(date_text)
+}
+
+```
+
+This notebook presents data and code used to generate figures included in the University of Washington Center for Human Rights publication "The Border Is Everywhere: Immigration Enforcement in the Contemporary Pacific Northwest". Figure numbering follows that used in the published report and excludes figures not based on data analysis. Several additional supplementary figures not in the published report are also presented here.
+
+# ICE enforcement events
+
+The following figures are based on U.S. Immigration and Customs Enforcement (ICE) data on encounters, arrests, and removals for fiscal years 2012 to January 2023, obtained by the University of Washington Center for Human Rights via FOIA litigation.
+
+For more information and to access this data, see: https://github.com/uwchr/ice-enforce
+
+```{r init_enforce}
+
+enc <- read_delim(here('write', 'input', 'ice_encounters_fy12-23ytd.csv.gz'), delim = '|',
+                  col_types = cols(aor = col_factor(),
+                                   event_date = col_character(),
+                                   landmark = col_character(),
+                                   operation = col_factor(),
+                                   processing_disposition = col_factor(),
+                                   citizenship_country = col_factor(),
+                                   gender = col_factor(),
+                                   hashid = col_character(),
+                                   id = col_number()))
+
+# glimpse(enc)
+
+redacted <- c('encounter_threat_level', 'alien_file_number')
+
+enc <- enc %>% 
+  dplyr::select(-redacted)
+
+enc <- enc %>% 
+  mutate(event_date = as_date(event_date, format="%m/%d/%Y"),
+         year = year(event_date),
+         month = month(event_date, label=TRUE, abbr=TRUE),
+         year_mth = zoo::as.yearmon(event_date),
+         fy = substr(quarter(event_date, fiscal_start=10, type="year.quarter"), 1,4),
+         gender = toupper(gender),
+         operation = toupper(operation),
+         processing_disposition = toupper(processing_disposition),
+         citizenship_country = toupper(citizenship_country))
+
+# ARRESTS DATA
+
+arr <- read_delim(here('write', 'input', 'ice_arrests_fy12-23ytd.csv.gz'), delim = '|',
+                  col_types = cols(aor = col_factor(),
+                                  arrest_date = col_date(format="%m/%d/%Y"),
+                                  departed_date = col_date(format="%m/%d/%Y"),
+                                  apprehension_landmark = col_factor(),
+                                  arrest_method = col_factor(),
+                                  operation = col_factor(),
+                                  processing_disposition = col_factor(),
+                                  citizenship_country = col_factor(),
+                                  gender = col_factor(),
+                                  case_closed_date = col_date(format="%m/%d/%Y"),
+                                  id = col_integer(),
+                                  hashid = col_character()
+                                  )) 
+
+redacted <- c('removal_threat_level', 'apprehension_threat_level', 'alien_file_number')
+
+arr <- arr %>% 
+  dplyr::select(-all_of(redacted))
+
+arr <- arr %>% 
+  mutate(arrest_date = as_date(arrest_date, format="%m/%d/%Y"),
+         year = year(arrest_date),
+         month = month(arrest_date, label=TRUE, abbr=TRUE),
+         year_mth = zoo::as.yearmon(arrest_date),
+         fy = substr(quarter(arrest_date, fiscal_start=10, type="year.quarter"), 1,4),
+         citizenship_country = as.factor(toupper(citizenship_country)))
+
+# REMOVALS DATA
+
+# pd_dict <- read_delim(here('share', 'hand', 'processing_disp.csv'), delim='|')
+
+rem <- read_delim(here('write', 'input', 'ice_removals_fy12-23ytd.csv.gz'), delim = '|',
+                  col_types = cols(aor = col_character(),
+                                   arrest_date = col_date(format="%m/%d/%Y"),
+                                  departed_date = col_date(format="%m/%d/%Y"),
+                                  case_close_date = col_date(format="%m/%d/%Y"),
+                                  removal_date = col_date(format="%m/%d/%Y"),
+                                  apprehension_method_code = col_character(),
+                                  processing_disposition_code = col_factor(),
+                                  citizenship_country = col_factor(),
+                                  gender = col_factor(),
+                                  final_charge_section = col_factor(),
+                                  id = col_integer(),
+                                  hashid = col_character()
+                                  ))
+
+redacted <- c('removal_threat_level', 'alien_file_number')
+
+rem <- rem %>% 
+  dplyr::select(-redacted, -case_closed_date)
+
+rem <- rem %>% 
+  mutate(year = year(departed_date),
+         month = month(departed_date, label=TRUE, abbr=TRUE),
+         year_mth = zoo::as.yearmon(departed_date),
+         processing_disp = toupper(coalesce(processing_disposition_code, processing_disposition)),
+         fy = substr(quarter(departed_date, fiscal_start=10, type="year.quarter"), 1,4))
+
+# rem <- left_join(rem, pd_dict, by=c('processing_disp' = 'processing_disposition_raw'))
+
+```
+
+## Figure 1
+
+Total ICE Enforcement Events, National compared to Seattle Area of Responsibility, FY 2012-22. Both nationally and in the Pacific Northwest region, ICE encounters, arrests, and removals have declined from a recent historic high point at the end of President Obama’s first term. Enforcement events increased during the Trump administration, with removals outpacing arrests in the Seattle Area of Responsibility. All categories of enforcement events declined with the onset of the COVID-19 pandemic in 2020; by 2022, rates of encounters and arrests had rebounded, but rates of removals remained low.
+
+```{r enforcement_overview}
+
+ice_enc_fy_natl <- enc %>% 
+  filter(
+    event_date <= "2022-09-30") %>% 
+  group_by(fy) %>% 
+  summarize(n_encounters = n())
+
+ice_arr_fy_natl <- arr %>% 
+  filter(
+    arrest_date <= "2022-09-30") %>% 
+  group_by(fy) %>% 
+  summarize(n_arrests = n())
+
+ice_rem_fy_natl <- rem %>% 
+  filter(
+    departed_date <= "2022-09-30") %>% 
+  group_by(fy) %>% 
+  summarize(n_removals = n())
+
+dat_natl <- left_join(ice_enc_fy_natl, ice_arr_fy_natl, by='fy') %>% 
+  left_join(ice_rem_fy_natl, by='fy')
+
+ice_enc_fy_sea <- enc %>% 
+  filter(
+    aor == specific_aor,
+    event_date <= "2022-09-30") %>% 
+  group_by(fy) %>% 
+  summarize(n_encounters = n())
+
+ice_arr_fy_sea <- arr %>% 
+  mutate(fy = substr(quarter(arrest_date, fiscal_start=10, type="year.quarter"), 1,4)) %>% 
+  filter(
+    aor == specific_aor,
+    arrest_date <= "2022-09-30") %>% 
+  group_by(fy) %>% 
+  summarize(n_arrests = n())
+
+ice_rem_fy_sea <- rem %>% 
+  mutate(fy = substr(quarter(departed_date, fiscal_start=10, type="year.quarter"), 1,4)) %>% 
+  filter(
+    aor == specific_aor,
+    departed_date <= "2022-09-30") %>% 
+  group_by(fy) %>% 
+  summarize(n_removals = n())
+
+dat_aor <- left_join(ice_enc_fy_sea, ice_arr_fy_sea, by='fy') %>% 
+  left_join(ice_rem_fy_sea, by='fy')
+
+dat_aor$group <- specific_area_of_responsibility
+dat_natl$group <- "National total"
+
+dat <- rbind(dat_aor, dat_natl) %>% 
+    rename(Encounters = n_encounters,
+         Arrests = n_arrests,
+         Removals = n_removals)
+
+title = "Total ICE Enforcement Events"
+subtitle = "National compared to Seattle Area of Responsibility, FY 2012-22"
+caption = "Source: ICE enforcement data\nFigure: University of Washington Center for Human Rights"
+
+p1 <- dat %>%
+  pivot_longer(cols=-c('fy', 'group')) %>% 
+  ggplot(aes(x = as.numeric(fy), y=value, color=name, group=name)) +
+  geom_line(linewidth=1) +
+  labs(title = title,
+       subtitle = subtitle,
+       caption = caption) +
+  xlab('Fiscal Year') +
+  scale_x_continuous(breaks=seq(2012,2024,4),
+                     minor_breaks=seq(2012, 2024, 1)) +
+  ylab("") +
+  ylim(0, NA) +
+  scale_color_discrete(name = "Enforcement type") +
+  facet_wrap(~group, scales = "free_y") +
+  theme_minimal()
+
+p1
+
+ggsave('total-enforcement.png', dpi="retina", width=7, height=5, bg="white")
+
+p1 <- ggplotly(p1 + labs(title = paste0(title,
+                      '<br>',
+                      '<sup>',
+                      subtitle,
+                      '</sup>')))
+
+p1 <- layout(p1, margin=list(t = 75))
+
+p1
+
+```
+
+## Figure 2
+
+Decline in ICE Criminal Alien Program (CAP) Arrests, National compared to Seattle Area of Responsibility, FY 2012-22. Custodial arrests via the Criminal Alien Program were the primary source of ICE arrests during recent years; arrests involving local and county jails (CAP Local Incarceration) have declined from an historic high point at the end of the first Obama administration, increasing during the Trump administration. Arrests involving state and federal prisons (CAP State Incarceration and CAP Federal Incarceration, respectively) have steadily declined at the national level. In ICE’s Seattle Area of Responsibility, the number of arrests involving local jails increased only slightly during the first year of the Trump administration and remained low through FY 2022.
+
+```{r cap_trend}
+
+natl_cap <- arr %>% 
+  filter(arrest_date >= "2011-10-01",
+         arrest_date <= "2022-09-30",
+         str_detect(arrest_method, "CAP")) %>%
+  mutate(group = "National")
+  
+sea_cap <- arr %>% 
+  filter(aor == specific_aor,
+       arrest_date >= "2011-10-01",
+       arrest_date <= "2022-09-30",
+       str_detect(arrest_method, "CAP")) %>%
+  mutate(group = "Seattle AOR")
+
+dat <- rbind(natl_cap, sea_cap)
+
+title = "Decline in ICE CAP Arrests"
+subtitle = "National compared to Seattle Area of Responsibility, FY 2012-22"
+caption = "Source: ICE enforcement data\nFigure: University of Washington Center for Human Rights"
+
+p1 <- dat %>% 
+  mutate(fy = as.numeric(fy)) %>% 
+  count(group, fy, arrest_method) %>% 
+  ggplot(aes(x = fy, y = n, color = arrest_method, group = arrest_method)) +
+  geom_line(linewidth=1) +
+  xlab('Fiscal Year') +
+  scale_x_continuous(breaks=seq(2012,2024,4),
+                     minor_breaks=seq(2012, 2024, 1)) +
+  ylab("") +
+  ylim(0, NA)+
+  facet_wrap(~group, scales = "free_y") +
+  labs(title = title,
+       subtitle = subtitle,
+       caption = caption,
+       color = "Arrest method") + 
+  theme_minimal()
+
+ggsave('cap-trend.png', dpi="retina", width=7, height=5, bg="white")
+
+p1 <- ggplotly(p1 + labs(title = paste0(title,
+                      '<br>',
+                      '<sup>',
+                      subtitle,
+                      '</sup>')))
+
+p1 <- layout(p1, margin=list(t = 75))
+
+p1
+
+```
+
+```{r sea_landmarks}
+
+# SEA `apprehension_landmark` values with inferred state and landmark type
+
+sea_landmarks <- read_delim(here('write', 'hand', "SEA_landmarks.csv"), delim='|')
+
+sea_arr <- arr %>% 
+  filter(aor == "SEA") %>% 
+  mutate(apprehension_landmark = str_squish(toupper(apprehension_landmark))) %>% 
+  left_join(., sea_landmarks, by="apprehension_landmark")
+
+```
+
+## Figure 3
+
+ICE Criminal Alien Program (CAP) Arrests Involving Local Jails, CAP Local Incarceration, OR vs. WA, FY 2016-22. ICE arrests involving local jails have declined in both Washington and Oregon state since 2017. In Washington State, such arrests increased slightly from FY 2021 to 2022, while in Oregon they declined to near zero in FY 2022. ICE’s arrest data does not specify the state where an arrest occurred; arrest state has been inferred from “Apprehension landmark” values cited in ICE data, such as city and county jails or local ICE sub-offices.
+
+```{r cap_local}
+
+title <- "ICE CAP Arrests Involving Local Jails"
+subtitle <- "CAP Local Incarceration, OR vs. WA, FY 2016-22"
+caption <- "State inferred from `apprehension_landmark` values\n\nSource: ICE enforcement data\nFigure: University of Washington Center for Human Rights"
+
+p1 <- sea_arr %>% 
+  filter(arrest_date >= '2015-10-01',
+         arrest_date <= '2022-09-30',
+         landmark_state %in% c('WA', 'OR'),
+         arrest_method == "CAP Local Incarceration") %>% 
+  mutate(landmark_state = as.factor(landmark_state),
+         arrest_method = as.factor(arrest_method)) %>% 
+  count(fy, landmark_state, arrest_method, .drop=FALSE) %>% 
+  mutate(fy = as.numeric(as.character(fy))) %>% 
+  filter(fy >= 2016,
+         fy <= 2022) %>% 
+  ggplot(aes(x=fy, y=n, fill=landmark_state, group=landmark_state)) +
+  geom_col(position="dodge") +
+  ylab("Arrests") +
+  xlab("Fiscal Year") +
+  scale_x_continuous(breaks=seq(2016, 2022, 1)) +
+  labs(title=title,
+       subtitle=subtitle,
+       caption=caption,
+       fill = "State") +
+  theme_minimal()
+
+ggsave('cap-local.png', dpi="retina", width=7, height=5, bg="white")
+
+p1 <- ggplotly(p1 + labs(title = paste0(title,
+                      '<br>',
+                      '<sup>',
+                      subtitle,
+                      '</sup>')))
+
+p1 <- layout(p1, margin=list(t = 75))
+
+p1
+
+```
+
+## Figure 4
+
+ICE Criminal Alien Program (CAP) Arrests Involving State Prisons, CAP State Incarceration, OR vs. WA, FY 2016-22. ICE arrests involving state prisons fell to zero during fiscal year 2022 in Oregon state following the passage of the “Sanctuary Promise Act”, which prohibits Oregon Department of Corrections collaboration with ICE. In Washington state, where collaboration is permitted as an exception to local “sanctuary” legislation, ICE arrests involving state prisons have continued.
+
+```{r cap_state}
+
+title <- "ICE CAP Arrests Involving State Prisons"
+subtitle <- "CAP State Incarceration, OR vs. WA, FY 2016-22"
+caption <- "State inferred from `apprehension_landmark` values\n\nSource: ICE enforcement data\nFigure: University of Washington Center for Human Rights"
+
+p1 <- sea_arr %>% 
+  filter(arrest_date >= '2015-10-01',
+         arrest_date <= '2022-09-30',
+         landmark_state %in% c('WA', 'OR'),
+         arrest_method == "CAP State Incarceration") %>% 
+  mutate(landmark_state = as.factor(landmark_state),
+         arrest_method = as.factor(arrest_method)) %>% 
+  count(fy, landmark_state, arrest_method, .drop=FALSE) %>% 
+  mutate(fy = as.numeric(as.character(fy))) %>% 
+  filter(fy >= 2016,
+         fy <= 2022) %>% 
+  ggplot(aes(x=fy, y=n, fill=landmark_state, group=landmark_state)) +
+  geom_col(position="dodge") +
+  ylab("Arrests") +
+  xlab("Fiscal Year") +
+  scale_x_continuous(breaks=seq(2016, 2022, 1)) +
+  labs(title=title,
+       subtitle=subtitle,
+       caption=caption,
+       fill = "State") +
+  theme_minimal()
+
+ggsave('cap-state.png', dpi="retina", width=7, height=5, bg="white")
+
+p1 <- ggplotly(p1 + labs(title = paste0(title,
+                      '<br>',
+                      '<sup>',
+                      subtitle,
+                      '</sup>')))
+
+p1 <- layout(p1, margin=list(t = 75))
+
+p1
+
+```
+
+## Supplemental figure
+
+```{r cap_federal}
+
+title <- "ICE CAP Arrests Involving Federal Prisons"
+subtitle <- "CAP Federal Incarceration, OR vs. WA, FY 2016-22"
+caption <- "State inferred from `apprehension_landmark` values\n\nSource: ICE enforcement data\nFigure: University of Washington Center for Human Rights"
+
+p1 <- sea_arr %>% 
+  filter(arrest_date >= '2015-10-01',
+         arrest_date <= '2022-09-30',
+         landmark_state %in% c('WA', 'OR'),
+         arrest_method == "CAP Federal Incarceration") %>% 
+  mutate(landmark_state = as.factor(landmark_state),
+         arrest_method = as.factor(arrest_method)) %>% 
+  count(fy, landmark_state, arrest_method, .drop=FALSE) %>% 
+  mutate(fy = as.numeric(as.character(fy))) %>% 
+  filter(fy >= 2016,
+         fy <= 2022) %>% 
+  ggplot(aes(x=fy, y=n, fill=landmark_state, group=landmark_state)) +
+  geom_col(position="dodge") +
+  ylab("Arrests") +
+  xlab("Fiscal Year") +
+  scale_x_continuous(breaks=seq(2016, 2022, 1)) +
+  labs(title=title,
+       subtitle=subtitle,
+       caption=caption,
+       fill = "State") +
+  theme_minimal()
+
+ggsave('cap-federal.png', dpi="retina", width=7, height=5, bg="white")
+
+p1 <- ggplotly(p1 + labs(title = paste0(title,
+                      '<br>',
+                      '<sup>',
+                      subtitle,
+                      '</sup>')))
+
+p1 <- layout(p1, margin=list(t = 75))
+
+p1
+
+```
+
+## Figure 5
+
+ICE Arrests by Method, Seattle Area of Responsibility, FY 2012-22. Custodial arrests via the Criminal Alien Program (CAP Local Incarceration, CAP State Incarceration, CAP Federal Incarceration) have historically represented the largest category of ICE arrests in the Seattle Area of Responsibility. Since the onset of the COVID-19 pandemic during fiscal year 2020, other categories have become prominent, with arrests designated by ICE as “Non-Custodial Arrest” and “Other efforts” making up more than half of arrests during fiscal year 2022. ICE data do not specify whether these arrests took place at-large in community settings or during check-ins at ICE offices; UWCHR review of other ICE records suggests that the majority of these arrests during 2020-2021 took place at ICE offices. Other methods depicted include “Located”, involving ICE Fugitive Operations arrests; and “ERO Reprocessed Arrest”, involving direct transfers from CBP custody. Arrest methods with fewer than 1000 total occurrences are excluded from this chart. 
+
+```{r arrest_method}
+
+methods <- arr %>% 
+  filter(aor == specific_aor,
+         arrest_date >= "2011-10-01",
+         arrest_date <= "2022-09-30") %>%
+  count(arrest_method) %>% 
+  arrange(desc(n))
+
+top_methods <- methods %>%
+  filter(n > 1000)
+
+arr <- arr %>% 
+  mutate(arrest_method_short = case_when(arrest_method %in% unlist(top_methods$arrest_method) ~ as.character(arrest_method), 
+                                         TRUE ~ "All others"))
+
+title <- "ICE Arrests by Method"
+subtitle <- "Seattle Area of Responsibility, FY 2012-22"
+caption <- "Source: ICE enforcement data\nFigure: University of Washington Center for Human Rights"
+
+p1 <- arr %>% 
+  filter(aor == specific_aor,
+         arrest_date >= "2011-10-01",
+         arrest_date <= "2022-09-30",
+         arrest_method_short != "All others") %>%
+  group_by(fy, arrest_method_short) %>%
+  ggplot(aes(x = fy, fill=arrest_method_short)) +
+  geom_bar(stat='count', position='stack', color='white') +
+  xlab("Fiscal Year") +
+  ylab("Arrests") +
+  labs(title = title,
+      subtitle = subtitle,
+      caption = caption,
+      fill = "Arrest method") +
+  theme_minimal()
+
+ggsave('sea-arrest-methods.png', dpi="retina", width=7, height=5, bg="white")
+
+p1 <- ggplotly(p1 + labs(title = paste0(title,
+                      '<br>',
+                      '<sup>',
+                      subtitle,
+                      '</sup>')))
+
+p1 <- layout(p1, margin=list(t = 75))
+
+p1
+
+```
+
+## Figure 7
+
+Total ICE Arrests by Country of Citizenship (Top 10), Seattle Area of Responsibility, FY 2019-22. ICE arrest data reveal changing demographics during fiscal years 2021 and 2022, with a significant decrease in the proportion of Mexican nationals and increasing arrests of people from Brazil, Colombia, Cuba, Nicaragua, Ukraine, and Venezuela.
+
+```{r arr_cit, message=FALSE, warning=FALSE, include=TRUE}
+
+cit <- arr %>%
+  filter(aor == specific_aor,
+         arrest_date >= "2018-10-01",
+         arrest_date <= "2022-09-30") %>%
+  mutate(citizenship_country = str_to_title(citizenship_country)) %>% 
+  group_by(citizenship_country) %>% 
+  summarize(n = n()) %>% 
+  arrange(desc(n))
+
+cit_categories <- 10
+title <- paste0("Total ICE Arrests by Country of Citizenship (Top ", cit_categories, ")")
+subtitle <- paste0(specific_area_of_responsibility, ", FY 2019-22")
+caption <- "Source: ICE enforcement data\nFigure: University of Washington Center for Human Rights"
+
+p1 <- arr %>% 
+  filter(aor == specific_aor,
+         arrest_date >= "2018-10-01",
+        arrest_date <= "2022-09-30") %>%
+  mutate(
+    citizenship_country = str_to_title(citizenship_country),
+    citizenship_country = case_when(
+    citizenship_country %in% head(cit$citizenship_country, cit_categories) ~ citizenship_country,
+    TRUE ~ "All others")
+  ) %>% 
+  count(fy, citizenship_country) %>% 
+  ggplot(aes(x=fy, y=n, fill=citizenship_country)) +
+  geom_col(color="white") +
+  xlab("Fiscal Year") +
+  ylab("Arrests") +
+  labs(title = title,
+       subtitle = subtitle,
+       caption = caption,
+       fill = "Citizenship") +
+  theme_minimal()
+
+ggsave('sea-arrest-citizenship.png', dpi="retina", width=7, height=5, bg="white")
+
+p1 <- ggplotly(p1 + labs(title = paste0(title,
+                      '<br>',
+                      '<sup>',
+                      subtitle,
+                      '</sup>')))
+
+p1 <- layout(p1, margin=list(t = 75))
+
+p1
+
+```
+
+```{r citizenship_table}
+
+tab <- arr %>% 
+  filter(aor == specific_aor,
+        arrest_date <= "2022-09-30") %>%
+  mutate(citizenship_country = str_to_title(citizenship_country),
+    citizenship_country = case_when(
+    citizenship_country %in% head(cit$citizenship_country, cit_categories) ~ citizenship_country,
+    TRUE ~ "All others"
+  ),
+        fy = as.numeric(fy)) %>% 
+  group_by(fy, citizenship_country) %>% 
+  summarize(n = n()) %>% 
+  ungroup() %>% 
+  group_by(fy) %>% 
+  mutate(prop = n / sum(n))
+
+# mean(tab[tab$citizenship_country == "Mexico" & tab$fy <= 2020, ]$prop)
+# mean(tab[tab$citizenship_country == "Mexico" & tab$fy >= 2021, ]$prop)
+
+```
+
+## Supplemental figure
+
+```{r arrest_gender}
+
+p1 <- arr %>% 
+  filter(aor == specific_aor,
+         arrest_date >= "2011-10-01",
+         arrest_date <= "2022-09-30") %>%
+  mutate(gender = as.factor(toupper(gender))) %>% 
+  count(fy, gender) %>% 
+  ggplot(aes(x=fy, y=n, fill=gender)) +
+  geom_col(position='fill') +
+  scale_y_continuous(labels = scales::percent) +
+  labs(title="Total ICE Arrests, Percent by Gender",
+       subtitle=specific_area_of_responsibility)
+
+p1
+
+ggsave('sea-arrest-gender.png', dpi="retina", width=7, height=5, bg="white")
+
+```
+
+```{r gender_table}
+
+dat <- arr %>% 
+  filter(aor == specific_aor,
+         arrest_date >= "2011-10-01",
+         arrest_date <= "2022-09-30") %>%
+  mutate(gender = as.factor(toupper(gender))) %>% 
+  count(fy, gender) %>% 
+  group_by(fy) %>% 
+  mutate(prop = n / sum(n))
+
+mean(dat[dat$gender == "FEMALE" & dat$fy <= 2020,]$prop)
+
+dat_natl <- arr %>% 
+  filter(arrest_date >= "2011-10-01",
+         arrest_date <= "2022-09-30") %>%
+  mutate(gender = as.factor(toupper(gender))) %>% 
+  count(fy, gender) %>% 
+  group_by(fy) %>% 
+  mutate(prop = n / sum(n))
+
+# mean(dat_natl[dat_natl$gender == "FEMALE" & dat_natl$fy <= 2020,]$prop)
+
+```
+
+```{r deinit_enforce}
+
+rm(rem, arr, enc)
+
+```
+
+# I-213s
+
+The following figure is based on a collection of U.S. Department of Homeland Security I-213 "Record of Deportable/Inadmissible Alien" forms for the Seattle Area of Responsibility for the period from January 1, 2019 to November 30, 2021, obtained by the University of Washington Center for Human Rights via FOIA litigation.
+
+For more information and to access the data, see: https://github.com/UWCHR/i-213-analysis
+
+## Supplemental figure
+
+```{r i213_age}
+
+i213 <- i213 %>% 
+  filter(source == "ice")
+
+pop_data <- i213 %>%
+    filter(!is.na(age), !is.na(sex), sex %in% c("M", "F")) %>%
+    mutate(age_group = cut(age,
+                           breaks = c(0, 18, 25, 40, 60, Inf),
+                           right = FALSE)) %>%
+    group_by(sex, age_group, lawsuit) %>% 
+    summarize(n = n()) %>% 
+    group_by(lawsuit) %>% 
+    mutate(prop = n / sum(n)) %>%
+    ungroup() %>% 
+    mutate(n = case_when(sex == "F" ~ -n,
+           TRUE ~ n),
+           prop = case_when(sex == "F" ~ -prop,
+           TRUE ~ prop))
+
+pop_prop_range <- range(pop_data$prop)
+pop_prop_range_breaks <- pretty(pop_prop_range, 10)
+
+p1 <- pop_data %>% 
+    ggplot(aes(x = prop, y = age_group, fill=sex)) +
+    geom_col() +
+    scale_y_discrete(limits=rev) +
+    scale_x_continuous(breaks = pop_prop_range_breaks,
+                       labels = function(x) scales::percent(abs(x))) + 
+  
+  facet_wrap(~lawsuit) +
+  labs(title = "I-213 forms age/sex distribution",
+       subtitle = "Subsets by lawsuit production") +
+  theme_minimal()
+
+p1
+
+ggsave('sea-i213-demog.png', dpi="retina", width=7, height=5, bg="white")
+
+dat <- i213 %>% 
+  filter(!is.na(age)) %>% 
+  mutate(age_group = cut(age,
+                           breaks = c(0, 18, 25, 40, 60, Inf),
+                           right = FALSE)) %>%
+  count(lawsuit, age_group) %>% 
+  group_by(lawsuit) %>% 
+  mutate(prop = n / sum(n))
+
+```
+
+```{r deinit_i213}
+
+rm(i213)
+
+```
+
+# CBP encounters
+
+The following figures are based on data made public by U.S. Customs and Border Protection: [U.S. Border Patrol monthly encounters for fiscal years 2000-2020](https://www.cbp.gov/document/stats/us-border-patrol-monthly-encounters-fy-2000-fy-2020); and [CBP nationwide encounters from FY 2020 to FY 2023](https://www.cbp.gov/newsroom/stats/nationwide-encounters).
+
+```{r cbp_init}
+
+usbp <- read_delim(here('write', 'input', 'usbp_monthly_encounters_fy2000-fy2020.csv.gz'), delim = '|')
+cbp <- read_delim(here('write', 'input', 'cbp-nationwide-encounters-fy20-fy23-aor.csv'), delim = ',')
+
+names(cbp) %<>%
+  str_replace_all(" \\s*\\([^\\)]+\\)", "") %>% 
+  str_replace_all("\\s","_") %>%
+  tolower()
+
+month_abb_fy <- c("Oct", "Nov", "Dec", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul","Aug", "Sep")
+
+cbp <- cbp %>% 
+  mutate(month_abb = ordered(str_to_title(month), month_abb_fy),
+         month = match(month_abb, month.abb),
+         calendar_year = case_when(month >= 10 ~ as.numeric(fiscal_year) -1,
+                                   TRUE ~ as.numeric(fiscal_year)))
+
+cbp$year_mon <- as.yearmon(paste(cbp$calendar_year, cbp$month, sep='-'))
+cbp$fy_quarter <- quarter(cbp$year_mon, fiscal_start=10, type="year.quarter")
+
+```
+
+## Figure 8
+
+U.S. Border Patrol (USBP) Blaine/Spokane Sector Encounters, FY 2000-23. Over the last two decades, encounters reported the Blaine and Spokane Sectors of U.S. Border Patrol generally trended down, reaching an historic low during the COVID-19 pandemic. During fiscal years 2022-23, encounters reported by Blaine Sector increased substantially to levels not seen since the mid-2000s. Since March of FY20, CBP “encounters” data include both Title 8 Apprehensions and Title 42 Expulsions. Title 42 Expulsions accounted for approximately 14% of encounters by Blaine and Spokane sectors during FY20, 60% of encounters during FY21, 11% of encounters during FY22, and around 1% of encounters during FY23.
+
+```{r cbp_chart}
+
+usbp_20_23 <- cbp %>% 
+  filter(component == "U.S. Border Patrol") %>% 
+  group_by(fiscal_year, calendar_year, month, year_mon, area_of_responsibility) %>% 
+  summarize(value = sum(encounter_count))
+
+usbp_00_20_long <- usbp %>% 
+  pivot_longer(cols=-c('month', 'fy', 'cy')) %>% 
+  filter(!name %in% c('monthly_total','coastal_border', 'northern_border', 'southwest_border')) %>% 
+  rename(sector = name)
+
+usbp_00_20_long$year_mon <- as.yearmon(paste(usbp_00_20_long$cy, usbp_00_20_long$month, sep='-'))
+
+sector_to_aor <- c("big_bend" = "Big Bend Sector",
+  "blaine" = "Blaine Sector",
+  "buffalo" = "Buffalo Sector",
+  "del_rio" = "Del Rio Sector",
+  "detroit" = "Detroit Sector",
+  "el_centro" = "El Centro Sector",
+  "el_paso" = "El Paso Sector",
+  "grand_forks" = "Grand Forks Sector",
+  "havre" = "Havre Sector",
+  "houlton" = "Houlton Sector",
+  "laredo" = "Laredo Sector",
+  "livermore" = "Livermore Sector",
+  "miami" = "Miami Sector",
+  "new_orleans" = "New Orleans Sector",
+  "ramey" = "Ramey Sector",
+  "rio_grande_valley" = "Rio Grande Valley Sector",
+  "san_diego" = "San Diego Sector",
+  "spokane" = "Spokane Sector",
+  "swanton" = "Swanton Sector",
+  "tucson" = "Tucson Sector",
+  "yuma" = "Yuma Sector")
+
+sector_to_aor <- unlist(sector_to_aor)
+
+sector_to_region <- cbp %>% 
+  filter(component == "U.S. Border Patrol") %>% 
+  dplyr::select(aor, area_of_responsibility, land_border_region) %>% 
+  distinct() %>% 
+  add_row(aor = "LIV", area_of_responsibility = "Livermore Sector", land_border_region = "Other")
+
+sector_to_region$sector <- names(sector_to_aor)[match(sector_to_region$area_of_responsibility, sector_to_aor)]
+
+usbp_20_23$sector <- names(sector_to_aor)[match(usbp_20_23$area_of_responsibility, sector_to_aor)]
+
+usbp_20_23 <- usbp_20_23 %>% 
+  dplyr::select(-area_of_responsibility)
+
+usbp_00_23 <- full_join(usbp_00_20_long, usbp_20_23, by=c("fy" = "fiscal_year",
+                                                   "cy" = "calendar_year",
+                                                   "month" = "month",
+                                                   "year_mon" = "year_mon",
+                                                   "sector" = "sector")) %>% 
+  full_join(sector_to_region, by = "sector") %>% 
+  mutate(diff = value.x - value.y)
+
+stopifnot(sum(usbp_00_23$diff, na.rm=TRUE) == 0)
+
+usbp_00_23$value <- coalesce(usbp_00_23$value.x, usbp_00_23$value.y)
+
+usbp_00_23 <- usbp_00_23 %>% 
+  select(-diff, -value.x, -value.y)
+
+title <- "U.S. Border Patrol Encounters"
+subtitle <- "Blaine and Spokane Sectors, FY 2000-23"
+caption <- "Source: USBP monthly encounters FY 2000-20\nCBP nationwide encounters FY 2020-23"
+
+p1 <- usbp_00_23 %>% 
+  filter(sector %in% c("blaine", "spokane")) %>% 
+  group_by(sector, fy) %>% 
+  mutate(sector = paste0(str_to_title(sector), " Sector")) %>% 
+  summarize(encounters = sum(value)) %>% 
+  ggplot(aes(x = fy, y = encounters, color = sector, group = sector)) +
+  geom_line(linewidth=1) +
+  scale_x_continuous(breaks=seq(2000,2023,4),
+                 minor_breaks=seq(2000, 2023, 1)) +
+  xlab("Fiscal Year") +
+  ylab("Encounters") +
+  labs(title=title,
+       subtitle=subtitle,
+       caption=caption,
+       color="USBP Sector") +
+  theme_minimal()
+
+ggsave('blw-spw-encounters.png', dpi="retina", width=7, height=5, bg="white")
+
+p1 <- ggplotly(p1 + labs(title = paste0(title,
+                      '<br>',
+                      '<sup>',
+                      subtitle,
+                      '</sup>')))
+
+p1 <- layout(p1, margin=list(t = 75))
+
+p1
+
+```
+
+## Figure 9
+
+U.S. Border Patrol Encounters by Citizenship (Top 5), FY 2020-23. CBP data reveal demographics of people encountered by Blaine Sector Border Patrol; note increase of Indian nationals during fiscal years 2022 and 2023. Demographics of people encountered by Spokane Sector Border Patrol have remained roughly constant during the same period.
+
+
+```{r cbp_cit}
+
+blw_spw <- cbp %>% 
+  filter(aor %in% c("BLW", "SPW"))
+
+blw_spw_cit <- blw_spw %>% 
+  filter(!citizenship == "OTHER") %>% 
+  mutate(citizenship = str_to_title(citizenship)) %>% 
+  group_by(citizenship) %>% 
+  summarize(total = sum(encounter_count)) %>% 
+  arrange(desc(total))
+
+title <- "U.S. Border Patrol Encounters by Citizenship (Top 5)"
+subtitle <- "Blaine and Spokane Sectors, FY 2020-23"
+caption <- caption <- "Source: CBP nationwide encounters FY 2020-23"
+
+p1 <- blw_spw %>% 
+  mutate(citizenship = str_to_title(citizenship),
+         citizenship = case_when(citizenship == "Other" ~ "All others",
+                                 citizenship %in% head(blw_spw_cit$citizenship, 5) ~ citizenship,
+                                 TRUE ~ "All others"),
+         aor = case_when(aor == "SPW" ~ "Spokane Sector",
+                         aor == "BLW" ~ "Blaine Sector")) %>% 
+  group_by(aor, fiscal_year, citizenship) %>% 
+  summarize(total = sum(encounter_count)) %>% 
+  ggplot(aes(x = fiscal_year, y = total, fill = citizenship)) +
+  geom_col(color="white") +
+  facet_wrap(~aor) +
+  xlab("Fiscal Year") +
+  ylab("Encounters") +
+  labs(title = title,
+       subtitle = ,
+       caption = caption,
+       fill = "Citizenship") +
+  theme_minimal()
+
+ggsave('blw-spw-citizenship.png', dpi="retina", width=7, height=5, bg="white")
+
+p1 <- ggplotly(p1 + labs(title = paste0(title,
+                      '<br>',
+                      '<sup>',
+                      subtitle,
+                      '</sup>')))
+
+p1 <- layout(p1, margin=list(t = 75))
+
+p1
+
+```
+
+## Supplemental figure
+
+```{r cbp_title42}
+
+p1 <- cbp %>% 
+  filter(component == "U.S. Border Patrol",
+         aor %in% c("BLW", "SPW")) %>% 
+  group_by(fiscal_year, title_of_authority) %>% 
+  summarize(total = sum(encounter_count) ) %>% 
+  ggplot(aes(x = fiscal_year, y = total, fill = title_of_authority, group = title_of_authority)) +
+  geom_col() +
+  labs(title = "U.S. Border Patrol Encounters by Title of Authority",
+       subtitle = "Blaine and Spokane Sectors, FY2020-23")
+
+p1
+
+ggsave('blw-spw-title.png', dpi="retina", width=7, height=5, bg="white")
+
+tab <- cbp %>% 
+  filter(component == "U.S. Border Patrol",
+         aor %in% c("BLW", "SPW")) %>% 
+  group_by(fiscal_year, title_of_authority) %>% 
+  summarize(total = sum(encounter_count) ) %>% 
+  group_by(fiscal_year) %>% 
+  mutate(prop = total / sum(total))
+
+```
+
+```{r deinit_cbp}
+
+rm(cbp)
+
+```
+
+# ICE detention and "Alternatives to Detention"
+
+The following figures are based on ICE detention history data for fiscal years 2012 through January 2024, obtained by the University of Washington Center for Human Rights via FOIA litigation. For more information and to access this data, see: https://github.com/UWCHR/ice-detain
+
+```{r sea_detention_data}
+
+# Initialize detention data
+
+det_head <- read_delim(here('write', 'input', 'headcount_fy11-24ytd.csv.gz'), delim = '|')
+det_all <- as.data.frame(read_feather(here('write', 'input', 'ice_detentions_fy11-24ytd.feather')))
+det_unique <- as.data.frame(read_feather(here('write', 'input', 'ice_unique_stays_fy11-24ytd.feather')))
+
+# Supplemental data
+
+sea_detention_facilities <- read_delim(here('write', 'hand', 'sea_detention_facilities.csv'), delim='|')
+
+detloc_aor <- det_all %>% 
+  distinct(detention_facility_code, area_of_responsibility) %>% 
+  arrange(detention_facility_code, area_of_responsibility)
+
+det_head <- left_join(det_head, detloc_aor, by="detention_facility_code")
+
+sea_det <- det_all %>% 
+  filter(area_of_responsibility == "Seattle Area of Responsibility") %>% 
+  left_join(sea_detention_facilities, by=c("detention_facility_code" = "detention_facility_code"))
+
+facil_code <- "CSCNWWA"
+facil_name <- "NW ICE PROCESSING CTR"
+
+# Get all anon ID values associated with facility
+facil_ids <- det_all %>% 
+  filter(detention_facility_code == facil_code) %>% 
+  distinct(anonymized_identifier)
+
+# Get all records for these anon IDs at facility
+facil_records <- det_all %>% 
+  filter(anonymized_identifier %in% unlist(facil_ids),
+         detention_facility_code == facil_code)
+
+# Get distinct record for each stay by person at facility
+facil_unique_stays <- facil_records %>% 
+  distinct(anonymized_identifier, stay_count, .keep_all = TRUE)
+
+```
+
+## Figure 10
+
+Total Average Detained Population (ADP) Plus “Alternatives to Detention” (ATD), Seattle Area of Responsibility, FY 2012-24. Since 2020, the average population subject to physical detention in ICE facilities in the Pacific Northwest has decreased slightly, while the population subject to ICE “Alternatives to Detention” programs has increased steadily. “Alternatives to Detention” data was obtained via FOIA by Syracuse University’s Transactional Records Access Clearinghouse (TRAC); ATD data is not available prior to FY 2019, and TRAC cautions that ATD data includes significant uncorrected errors. Outlier data points have been removed from data used in this chart.
+
+```{r adp_plus_atd}
+
+trac_atd <- read_delim(here::here('write', 'input', 'trac_atd_2024-02-24.csv'), delim=',')
+
+names(trac_atd) <- tolower(names(trac_atd))
+names(trac_atd) <- str_replace_all(names(trac_atd), " ", "_")
+
+trac_atd$Date <- as.Date(trac_atd$date, format = "%m/%d/%Y")
+trac_atd$year_mth <- as.yearmon(trac_atd$Date)
+
+aor_atd <- trac_atd %>% 
+  filter(!is.na(ice_area_of_responsibility),
+         atd_technology == "All",
+         ice_area_of_responsibility == "Seattle")
+
+# Remove outlier
+aor_atd <- aor_atd[!aor_atd$number_under_atd %in% boxplot.stats(aor_atd$number_under_atd)$out,]
+
+monthly_aor_atd <- aor_atd %>% 
+  group_by(year_mth) %>% 
+  summarize(avg_atd = mean(number_under_atd, na.rm = FALSE)) %>% 
+  mutate(type = '"Alternatives to Detention"') %>% 
+  rename(n = avg_atd)
+
+monthly_adp <- det_head %>% 
+  filter(date >= "2011-10-01",
+         area_of_responsibility == "Seattle Area of Responsibility") %>% 
+  group_by(date) %>% 
+  summarize(total_detained = sum(n)) %>% 
+  mutate(year_mth = as.yearmon(date)) %>% 
+  group_by(year_mth) %>% 
+  summarize(adp = mean(total_detained, na.rm=TRUE)) %>% 
+  mutate(type = "Physical detention\n(Avg. daily pop.)") %>% 
+  rename(n = adp)
+
+dat <- rbind(monthly_aor_atd, monthly_adp)
+
+title <- 'Population in ICE Detention and "Alternatives to Detention"'
+subtitle <- "Seattle Area of Responsibility, FY 2012-23"
+caption <- "TRAC cautions that ATD data include errors, outlier datapoints have been removed.\n\nSource: ICE detention data obtained by UWCHR, ATD data obtained by TRAC\nFigure: University of Washington Center for Human Rights"
+
+p1 <- dat %>%
+  filter(year_mth >= as.yearmon("2011-10-01"),
+         year_mth <= as.yearmon("2023-09-30")) %>% 
+  ggplot(aes(x = year_mth, y = n, color = type, group = type)) +
+  geom_line(linewidth=1) +
+  ylim(0, NA) +
+  xlab("") +
+  ylab("Population") +
+  labs(title = title,
+       subtitle = subtitle,
+       caption = caption,
+       color = "Measure") +
+  theme_minimal()
+
+ggsave('sea-adp-atd.png', dpi="retina", width=7, height=5, bg="white")
+
+p1 <- ggplotly(p1 + labs(title = paste0(title,
+                      '<br>',
+                      '<sup>',
+                      subtitle,
+                      '</sup>')))
+
+p1 <- layout(p1, margin=list(t = 75))
+
+p1
+
+```
+
+```{r headcounter}
+
+min_date <- min(det_all$stay_book_in_date_time, na.rm=TRUE)
+max_date <- max(det_all$stay_book_out_date_time, na.rm=TRUE)
+
+timeline <- seq(min_date, max_date, by='day')
+
+headcounter <- function(date, df=df, var=var) {
+  df[[var]] <- factor(df[[var]], levels = sort(unique(df[[var]])))
+  df <- df %>%
+    mutate(detention_book_out_date_time_min = case_when(is.na(detention_book_out_date_time) ~ max_date,
+                                                    TRUE ~ detention_book_out_date_time))
+  df[df$detention_book_in_date_and_time <= date & df$detention_book_out_date_time_min >= date,] %>% 
+  count(.data[[var]]) %>% 
+  complete(.data[[var]], fill = list(n = 0)) %>% 
+  arrange(.data[[var]]) %>% 
+  mutate(date=date)
+  }
+
+```
+
+```{r citizenship_headcount}
+
+facil_cit_headcount <- lapply(timeline, headcounter, df=facil_records, var='citizenship_country')
+
+facil_cit_headcount_data <- map_dfr(facil_cit_headcount, bind_rows)
+
+facil_top_citizenship <- facil_unique_stays %>%
+  count(citizenship_country) %>%
+  arrange(desc(n))
+
+```
+
+## Figure 11
+
+Average Daily Population (ADP) by Country of Citizenship, NW ICE Processing Center, FY 2016-24. ICE detention data reveal changing demographics of the population detained at the NW ICE Processing Center (formerly Northwest Detention Center) in Tacoma, WA. In particular, Indian nationals make up a larger proportion of the detained population than ever before.
+
+```{r cit_adp}
+
+dat <- facil_cit_headcount_data %>% 
+  filter(date > "2015-10-01") %>% 
+  mutate(citizenship_country = case_when(citizenship_country %in% unlist(head(facil_top_citizenship, 10)) ~ citizenship_country,
+                                         TRUE ~ "ALL OTHERS"),
+         citizenship_country = case_when(citizenship_country == "CHINA, PEOPLES REPUBLIC OF" ~ "CHINA",
+                                         TRUE ~ citizenship_country),
+         citizenship_country = str_to_title(citizenship_country)) %>% 
+  group_by(date, citizenship_country) %>% 
+  summarize(total_detained = sum(n)) %>% 
+  mutate(fy = as.numeric(substr(quarter(date, fiscal_start = 10, type="year.quarter"), 1, 4))) %>% 
+  group_by(fy, citizenship_country) %>% 
+  summarize(adp = mean(total_detained)) %>% 
+  mutate(prop = adp / sum(adp))
+
+title <- "Average Daily Population (ADP) by Country of Citizenship"
+subtitle <- "NW ICE PROCESSING CTR, FY 2016-24"
+caption <- "Source: ICE detention data obtained by UWCHR\nFigure: University of Washington Center for Human Rights"
+
+p1 <- dat %>% 
+  filter(fy >= 2016) %>%
+  ggplot(aes(x = as.factor(fy), y = adp, fill=citizenship_country, group=citizenship_country)) +
+  geom_col(color="white") +
+  xlab("Fiscal Year") +
+  ylab("ADP") +
+  labs(title = title,
+       subtitle = subtitle,
+       fill = "Citizenship") +
+  theme_minimal()
+
+ggsave('nwipc-citizenship.png', dpi="retina", width=7, height=5, bg="white")
+
+p1 <- ggplotly(p1 + labs(title = paste0(title,
+                      '<br>',
+                      '<sup>',
+                      subtitle,
+                      '</sup>')))
+
+p1 <- layout(p1, margin=list(t = 75))
+
+p1
+
+```
+
+## Figure 12
+
+Comparison of Average Length of Stay (ALOS), National versus NW ICE Processing Center, FY 2012-23. Individuals detained at the Northwest ICE Processing Center in Tacoma, WA, have consistently experienced longer overall stays in detention, on average, than those detained at other detention facilities nationwide. Detention facilities with ALOS under 72 hours are excluded from comparison.
+
+
+```{r alos_compare}
+
+facil_alos <- det_unique %>% 
+  filter(stay_book_in_date_time >= "2011-10-01") %>% 
+  mutate(detention_fy = substr(quarter(stay_book_in_date_time, with_year = TRUE, fiscal_start = 10),1,4)) %>%
+  group_by(detention_fy, detention_facility_code) %>% 
+  summarize(alos = mean(as.numeric(stay_length, units='days'), na.rm=TRUE),
+            med_alos = median(as.numeric(stay_length, units='days'), na.rm=TRUE)) %>% 
+  mutate(under_72 = med_alos < 3) %>% 
+  ungroup()
+
+over_72_facils <- facil_alos %>% 
+  filter(under_72 == FALSE) %>% 
+  distinct(detention_facility_code)
+
+natl_alos <- det_unique %>% 
+  filter(stay_book_in_date_time >= "2011-10-01",
+         detention_facility_code %in% over_72_facils$detention_facility_code) %>% 
+  mutate(detention_fy = substr(quarter(stay_book_in_date_time, with_year = TRUE, fiscal_start = 10),1,4)) %>% 
+  group_by(detention_fy) %>% 
+  summarize(alos = mean(as.numeric(stay_length, units='days'), na.rm=TRUE))
+
+dat <- facil_alos %>% 
+  dplyr::select(-c(med_alos, under_72)) %>% 
+  left_join(natl_alos, by = 'detention_fy', suffix=c(".facil", ".natl")) %>% 
+  rename("National" = alos.natl,
+         "NWIPC" = alos.facil) %>% 
+  pivot_longer(cols=-c('detention_fy', 'detention_facility_code')) %>% 
+  filter(detention_facility_code == "CSCNWWA") %>% 
+  dplyr::select(-detention_facility_code)
+
+title <- "Comparison of Average Length of Stay (ALOS)"
+subtitle <- "National vs. NW ICE PROCESSING CTR, FY 2012-23"
+caption <- "National facilities with ALOS under 72 hours excluded\n\nSource: ICE individual detention data\nFigure: University of Washington Center for Human Rights"
+
+p1 <- dat %>% 
+  mutate(detention_fy = as.numeric(detention_fy)) %>% 
+  filter(detention_fy < 2024) %>% 
+  ggplot(aes(x=detention_fy, y = value, fill = name, group = name)) +
+  geom_col(position="dodge") +
+  scale_x_continuous(breaks = seq(2012, 2023, 2),
+                   minor_breaks = seq(2012, 2023, 1)) +
+  ylim(0, NA) +
+  ylab("ALOS (Days)") +
+  xlab("Detention FY") +
+  labs(title = title,
+       subtitle = subtitle,
+       caption = caption,
+       fill = "Detention location") +
+  theme_minimal()
+
+ggsave('nwipc-alos.png', dpi="retina", width=7, height=5, bg="white")
+
+p1 <- ggplotly(p1 + labs(title = paste0(title,
+                      '<br>',
+                      '<sup>',
+                      subtitle,
+                      '</sup>')))
+
+p1 <- layout(p1, margin=list(t = 75))
+
+p1
+
+```
+
+```{r deinit_det}
+
+rm(det_all, det_unique)
+
+```
+
+# Immigration court outcomes
+
+The following figures are based on immigration court data from the Department of Justice’s Executive Office for Immigration Review (EOIR) regarding [immigration bond hearings](https://trac.syr.edu/phptools/immigration/bond/) and [immigration court outcomes](https://trac.syr.edu/phptools/immigration/closure/) published online by Syracuse University’s Transaction Records Access Clearinghouse (TRAC).
+
+```{r trac_import}
+
+trac_bond_amount <- read_delim(here('write', 'hand', 'TRAC_bond_amount.csv'), delim=',')
+trac_bond_granted <- read_delim(here('write', 'hand', 'TRAC_bond_granted.csv'), delim=',')
+trac_removals <- read_delim(here('write', 'hand', 'TRAC_removals.csv'), delim=',')
+
+```
+
+## Figure 13
+
+Percent of Immigration Cases in Which Bond Granted, Washington and nationwide, FY 2012 - May 2024. Immigration courts in Washington state granted bond to detained immigrants at a rate significantly below courts nationwide during recent years. Immigration bond hearing data is released by the U.S. Department of Justice Executive Office of Immigration Review (EOIR) and analyzed by TRAC.
+
+```{r pct_bond_granted}
+
+title <- "Percent of Immigration Cases in Which Bond Granted"
+subtitle <- "Washington and nationwide, FY 2021 - May 2024"
+caption <- "Source: TRAC Immigration Court Bond Hearings and Related Case Decisions\nFigure: University of Washington Center for Human Rights"
+
+p1 <- trac_bond_granted %>% 
+  ggplot(aes(x = fiscal_year, y = pct_granted, fill = group, group = group)) +
+  geom_col(position='dodge') +
+  xlab("Fiscal Year") +
+  ylab("Percent Granted") +
+  
+  scale_y_continuous(labels = scales::label_percent(), limits = c(0, .4)) +
+  labs(title = title,
+       subtitle = subtitle,
+       caption = caption,
+       fill = "Courts") +
+  theme_minimal()
+
+ggsave('bond-granted.png', dpi="retina", width=7, height=5, bg="white")
+
+p1 <- ggplotly(p1 + labs(title = paste0(title,
+                      '<br>',
+                      '<sup>',
+                      subtitle,
+                      '</sup>')))
+
+p1 <- layout(p1, margin=list(t = 75))
+
+p1
+
+```
+
+## Figure 14
+
+Median Immigration Court Bond Amounts, 5 states with most total bond decisions, WA, and nationwide, FY 2021 - May 2024. When immigration courts in Washington state grant bond to detained immigrants, they tend to set higher bonds than those set by immigration courts in other states; the median bond amount in Washington immigration courts was consistently above the national median from fiscal year 2021 to May 2024. Washington ranks 7th among states by total number of bond hearings. Immigration bond hearing data is released by the U.S. Department of Justice Executive Office of Immigration Review (EOIR) and analyzed by TRAC.
+
+
+```{r trac_bond_amount}
+
+title <- "Median Immigration Court Bond Amounts"
+subtitle <- "5 states with most bond decisions, WA, and nationwide, FY 2021 - May 2024"
+caption <- "Source: TRAC Immigration Court Bond Hearings and Related Case Decisions\n
+       Figure: University of Washington Center for Human Rights"
+
+p1 <- trac_bond_amount %>% 
+  mutate(group = factor(group, levels = c("Nationwide", "AZ", "CA", "LA", "NJ", "TX", "WA"))) %>% 
+  ggplot(aes(x = fiscal_year, y = median_bond, color = group, group = group)) +
+  geom_line(linewidth=1) + 
+  geom_point(size=2) +
+  scale_y_continuous(labels = scales::label_dollar(), limits = c(0, 10000)) +
+  # 
+  xlab("Fiscal Year") +
+  ylab("Med. Bond Amount (USD)") +
+  labs(title = title,
+       subtitle = subtitle,
+       caption = caption,
+       fill = "Courts") +
+  theme_minimal()
+
+ggsave('bond-amount.png', dpi="retina", width=7, height=5, bg="white")
+
+p1 <- ggplotly(p1 + labs(title = paste0(title,
+                      '<br>',
+                      '<sup>',
+                      subtitle,
+                      '</sup>')))
+
+p1 <- layout(p1, margin=list(t = 75))
+
+p1
+
+
+```
+
+## Figure 15
+
+Percent of Immigration Cases in Which Relief of Deportation Denied, Tacoma and nationwide detained cases, FY 2021 - May 2024. The Tacoma immigration court, which hears cases of detained immigrants in Washington state, issues more decisions resulting in denial of relief of deportation than courts nationwide. “Denial of relief from deportation” is defined as the proportion of cases resulting in removal orders or voluntary departure. Data regarding immigration court outcomes is released by the U.S. Department of Justice Executive Office of Immigration Review (EOIR) and analyzed by TRAC.
+
+```{r detained_outcomes}
+
+title <-  "Percent of Immigration Cases in Which Relief of Deportation Denied"
+subtitle <- "Tacoma and nationwide detained cases, FY 2021 - May 2024"
+caption <- "Source: TRAC Outcomes of Immigration Court Proceedings\nFigure: University of Washington Center for Human Rights"
+
+p1 <- trac_removals %>%
+  filter(group %in% c("Tacoma", "Nationwide detained")) %>% 
+  ggplot(aes(x = fiscal_year, y = pct_removal_vd, fill = group, group = group)) +
+  geom_col(position="dodge") +
+  xlab("Fiscal Year") +
+  ylab("Percent") +
+  
+  scale_y_continuous(labels = scales::label_percent(), limits = c(0, .9)) +
+  labs(title = title,
+       subtitle = subtitle,
+       caption = caption,
+       fill = "Courts") +  
+  theme_minimal()
+
+ggsave('tacoma-detained-outcome.png', dpi="retina", width=7, height=5, bg="white")
+
+p1 <- ggplotly(p1 + labs(title = paste0(title,
+                      '<br>',
+                      '<sup>',
+                      subtitle,
+                      '</sup>')))
+
+p1 <- layout(p1, margin=list(t = 75))
+
+p1
+
+```
+
+## Figure 16
+
+Percent of Immigration Cases in Which Relief of Deportation Denied, Seattle and nationwide non-detained cases, FY 2021 - May 2024. The Seattle immigration court, which hears cases of non-detained immigrants in Washington state, also issues more decisions resulting in denial of relief of deportation than courts nationwide. “Denial of relief from deportation” is defined as the proportion of cases resulting in removal orders or voluntary departure. Data regarding immigration court outcomes is released by the U.S. Department of Justice Executive Office of Immigration Review (EOIR) and analyzed by TRAC.
+
+```{r nondetained_outcomes}
+
+title <- "Percent of Immigration Cases in Which Relief of Deportation Denied"
+subtitle <- "Seattle and nationwide non-detained cases, FY 2021 - May 2024"
+caption <- "Source: TRAC Outcomes of Immigration Court Proceedings\nFigure: University of Washington Center for Human Rights"
+
+p1 <- trac_removals %>%
+  filter(group %in% c("Seattle", "Nationwide non-detained")) %>% 
+  ggplot(aes(x = fiscal_year, y = pct_removal_vd, fill = group, group = group)) +
+  geom_col(position="dodge") +
+  xlab("Fiscal Year") +
+  ylab("Percent") +
+  scale_y_continuous(labels = scales::label_percent(), limits = c(0, .5)) +
+  labs(title = title,
+       subtitle = subtitle,
+       caption = caption,
+       fill = "Courts") +  
+  theme_minimal()
+
+ggsave('seattle-nondetained-outcome.png', dpi="retina", width=7, height=5, bg="white")
+
+p1 <- ggplotly(p1 + labs(title = paste0(title,
+                      '<br>',
+                      '<sup>',
+                      subtitle,
+                      '</sup>')))
+
+p1 <- layout(p1, margin=list(t = 75))
+
+p1
+
+```
+
