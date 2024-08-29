@@ -230,8 +230,6 @@ p1 <- dat %>%
   facet_wrap(~group, scales = "free_y") +
   theme_minimal()
 
-p1
-
 ggsave('total-enforcement.png', dpi="retina", width=7, height=5, bg="white")
 
 p1 <- ggplotly(p1 + labs(title = paste0(title,
@@ -584,6 +582,8 @@ tab <- arr %>%
 
 ## Supplemental figure
 
+ICE arrest data show increasing proportion of females subject to arrest in the Seattle Area of Responsibility; this trend is particularly pronounced in arrests coded as "Non-Custodial Arrest" and "Other efforts".
+
 ```{r arrest_gender}
 
 p1 <- arr %>% 
@@ -601,6 +601,22 @@ p1 <- arr %>%
 p1
 
 ggsave('sea-arrest-gender.png', dpi="retina", width=7, height=5, bg="white")
+
+p2 <- arr %>% 
+  filter(aor == specific_aor,
+         arrest_date >= "2011-10-01",
+         arrest_date <= "2022-09-30") %>%
+  mutate(gender = as.factor(toupper(gender))) %>% 
+  count(fy, gender, arrest_method_short) %>% 
+  ggplot(aes(x=fy, y=n, fill=gender)) +
+  geom_col(position='fill') +
+  scale_y_continuous(labels = scales::percent) +
+  scale_x_discrete(breaks = seq(2012, 2022, 4)) +
+  labs(title="Total ICE Arrests, Percent by Gender",
+       subtitle=specific_area_of_responsibility) +
+  facet_wrap(~arrest_method_short)
+
+p2
 
 ```
 
@@ -637,16 +653,23 @@ rm(rem, arr, enc)
 
 # I-213s
 
-The following figure is based on a collection of U.S. Department of Homeland Security I-213 "Record of Deportable/Inadmissible Alien" forms for the Seattle Area of Responsibility for the period from January 1, 2019 to November 30, 2021, obtained by the University of Washington Center for Human Rights via FOIA litigation.
+The following figure is based on a collection of U.S. Department of Homeland Security I-213 "Record of Deportable/Inadmissible Alien" forms for the Seattle Area of Responsibility for the period from January 1, 2019 to November 30, 2021, obtained by the University of Washington Center for Human Rights via FOIA litigation. The I-213 forms were obtained in two "batches" pursuant to subsequent FOIA lawsuits; the first lawsuit collection covers the dates from January 1, 2019 to March 31, 2020, the second collection covers the period from April 1, 2020, through November 30, 2021. For more information and to access a public version of the data, see: https://github.com/UWCHR/i-213-analysis
 
-For more information and to access the data, see: https://github.com/UWCHR/i-213-analysis
+## I-213 classification
+
+To assess changing characteristics of ICE arrests UWCHR researchers hand coded a sample of I-213 forms for “non-custodial” or “other” arrests based on whether form narratives described an at-large arrest in the local community, and used a machine-learning model to classify the remaining forms. Results showed that the majority of records for the latter period of the collection describe arrests of individuals self-reporting to ICE field offices to be issued charging documents following a prior encounter by Border Patrol at the southern U.S. border. Individuals arrested in check-ins at ICE field offices were more likely to be females, minors, and from countries other than Mexico. For more detail, see: Andrew Shaw, “I-213 Classification Memo,” UWCHR, May 31, 2024, https://uwchr.github.io/i-213-analysis/model.html
 
 ## Supplemental figure
+
+I-213 forms obtained by UWCHR show evidence of changing demographics over time, with more women and minors represented in the period from April 2020 through November 2021; this trend is primarily driven by increase of women and children in forms coded by ICE as "NCA" (non-custodial arrest) and "O" ("other effots").
 
 ```{r i213_age}
 
 i213 <- i213 %>% 
-  filter(source == "ice")
+  filter(source == "ice",
+         office %in% c("SEA", "POO")) %>% 
+  mutate(lawsuit = case_when(lawsuit == 1 ~ "Jan. 2019 - Mar. 2020",
+                             lawsuit == 2 ~ "Apr. 2020 - Nov. 2021"))
 
 pop_data <- i213 %>%
     filter(!is.na(age), !is.na(sex), sex %in% c("M", "F")) %>%
@@ -672,9 +695,8 @@ p1 <- pop_data %>%
     scale_y_discrete(limits=rev) +
     scale_x_continuous(breaks = pop_prop_range_breaks,
                        labels = function(x) scales::percent(abs(x))) + 
-  
   facet_wrap(~lawsuit) +
-  labs(title = "I-213 forms age/sex distribution",
+  labs(title = "ICE I-213 forms age/sex distribution",
        subtitle = "Subsets by lawsuit production") +
   theme_minimal()
 
@@ -690,6 +712,40 @@ dat <- i213 %>%
   count(lawsuit, age_group) %>% 
   group_by(lawsuit) %>% 
   mutate(prop = n / sum(n))
+
+
+pop_data <- i213 %>%
+    filter(!is.na(age), !is.na(sex), sex %in% c("M", "F")) %>%
+    mutate(age_group = cut(age,
+                           breaks = c(0, 18, 25, 40, 60, Inf),
+                           right = FALSE),
+           method_short = case_when(method_short %in% c("NCA","O") ~ "NCA/O",
+                                    TRUE ~ "All others")) %>%
+    group_by(sex, age_group, lawsuit, method_short) %>% 
+    summarize(n = n()) %>% 
+    group_by(method_short) %>% 
+    mutate(prop = n / sum(n)) %>%
+    ungroup() %>% 
+    mutate(n = case_when(sex == "F" ~ -n,
+           TRUE ~ n),
+           prop = case_when(sex == "F" ~ -prop,
+           TRUE ~ prop))
+
+pop_prop_range <- range(pop_data$prop)
+pop_prop_range_breaks <- pretty(pop_prop_range, 10)
+
+p1 <- pop_data %>% 
+    ggplot(aes(x = prop, y = age_group, fill=sex)) +
+    geom_col() +
+    scale_y_discrete(limits=rev) +
+    scale_x_continuous(breaks = pop_prop_range_breaks,
+                       labels = function(x) scales::percent(abs(x))) + 
+  facet_wrap(lawsuit~method_short) +
+  labs(title = "ICE I-213 forms age/sex distribution",
+       subtitle = "Subsets by method of arrest and lawsuit production") +
+  theme_minimal()
+
+p1
 
 ```
 
@@ -1348,7 +1404,7 @@ p1 <- trac_removals %>%
        fill = "Courts") +  
   theme_minimal()
 
-ggsave('seattle-nondetained-outcome.png', dpi="retina", width=7, height=5, bg="white")
+ggsave('seattle-nondetained-outcome.png', dpi="retina", width=7, height=5)
 
 p1 <- ggplotly(p1 + labs(title = paste0(title,
                       '<br>',
