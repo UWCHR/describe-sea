@@ -8,3 +8,4 @@
 *.Rproj
 *.html
 *.xlsx
+import/frozen/*
