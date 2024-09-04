@@ -19,3 +19,9 @@ This repository presents UWCHR analysis of data from multiple sources:
 - Analysis of a collection of DHS I-213 “Record of Deportable/Inadmissible Alien” forms, obtained by UWCHR through Freedom of Information Act litigation against DHS, which provide detailed narratives of apprehensions in the Seattle Area of Responsibility covering the period from January 1, 2019 to November 30, 2021. This data is analzed in the following respository: https://github.com/UWCHR/i-213-analysis
 - Publicly available datasets published by Customs and Border Protection (CBP), including two sources of nationwide aggregate data on [US Border Patrol monthly encounters from FY 2000 to FY 2020](https://www.cbp.gov/document/stats/us-border-patrol-monthly-encounters-fy-2000-fy-2020) and [CBP nationwide encounters from FY 2020 to FY 2023](https://www.cbp.gov/newsroom/stats/nationwide-encounters). This data is processed in the following repositry: https://github.com/UWCHR/cbp
 - Immigration court data from the Department of Justice’s Executive Office for Immigration Review (EOIR) and ICE “Alternatives to Detention” data published online by [Syracuse University’s Transaction Records Access Clearinghouse (TRAC)](https://trac.syr.edu/immigration/tools/).
+
+## To-do
+
+- [ ] Code to download source data via Google Drive?
+- [ ] Makefiles to generate necessary symlinks
+- [ ] Knit documentation via code
