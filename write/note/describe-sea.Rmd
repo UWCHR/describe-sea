@@ -2,7 +2,7 @@
 title: Descriptive analysis of tends in immigration enforcement in the Pacific Northwest
 author:
 - "[University of Washington Center for Human Rights](https://github.com/UWCHR)"
-date: 28 August, 2024
+date: 4 September, 2024
 output:
     html_document:
         html_preview: true
@@ -1027,7 +1027,7 @@ Total Average Detained Population (ADP) Plus “Alternatives to Detention” (AT
 
 ```{r adp_plus_atd}
 
-trac_atd <- read_delim(here::here('write', 'input', 'trac_atd_2024-02-24.csv'), delim=',')
+trac_atd <- read_delim(here::here('write', 'hand', 'trac_atd_2024-02-24.csv'), delim=',')
 
 names(trac_atd) <- tolower(names(trac_atd))
 names(trac_atd) <- str_replace_all(names(trac_atd), " ", "_")
