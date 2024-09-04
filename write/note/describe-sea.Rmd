@@ -45,7 +45,7 @@ year_mon_to_text <- function(date) {
 
 ```
 
-This notebook presents data and code used to generate figures included in the University of Washington Center for Human Rights publication "The Border Is Everywhere: Immigration Enforcement in the Contemporary Pacific Northwest". Figure numbering follows that used in the published report and excludes figures not based on data analysis. Several additional supplementary figures not in the published report are also presented here.
+This notebook presents data and code used to generate figures included in the University of Washington Center for Human Rights publication "[The Border Is Everywhere: Immigration Enforcement in the Contemporary Pacific Northwest](https://jsis.washington.edu/humanrights/2024/09/05/the-border-is-everywhere-immigration-enforcement-in-the-contemporary-pacific-northwest/)". Figure numbering follows that used in the published report and excludes figures not based on data analysis. Several additional supplementary figures not in the published report are also presented here.
 
 # ICE enforcement events
 
