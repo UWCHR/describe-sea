@@ -8,7 +8,7 @@ This repository generates figures and an [interactive data appendix](https://uwc
 
 The datasets analyzed in this repository as of September 4, 2024 are available at the following link: https://drive.google.com/drive/folders/1N4uRkWTSTZx7zkSRc0fqyij6FouQN7SH?usp=drive_link
 
-To generate documentation produced by code in this repository, unzip the files at the link above in the `import/input/` directory in this repository.
+To generate documentation produced by code in this repository, unzip the files at the link above in the `import/input/` directory in this repository; these files are targetted by symlinks in `write/input/` which are required to Knit data appendix via `write/note/describe-sea.Rmd`.
 
 ### Data sources
 
