@@ -1,8 +1,8 @@
 ---
-title: Descriptive analysis of tends in immigration enforcement in the Pacific Northwest
+title: "Data Appendix - The Border Is Everywhere: Immigration Enforcement in the Contemporary Pacific Northwest"
 author:
 - "[University of Washington Center for Human Rights](https://github.com/UWCHR)"
-date: 4 September, 2024
+date: 5 September, 2024
 output:
     html_document:
         html_preview: true
