@@ -984,9 +984,21 @@ The following figures are based on ICE detention history data for fiscal years 2
 
 # Initialize detention data
 
-det_head <- read_delim(here('write', 'input', 'headcount_fy11-24ytd.csv.gz'), delim = '|')
-det_all <- as.data.frame(read_feather(here('write', 'input', 'ice_detentions_fy11-24ytd.feather')))
-det_unique <- as.data.frame(read_feather(here('write', 'input', 'ice_unique_stays_fy11-24ytd.feather')))
+date_formats <- cols(
+  "stay_book_in_date_time" = col_datetime(format =  "%Y-%m-%dT%H:%M:%SZ"),
+  "detention_book_in_date_and_time" = col_datetime(format =  "%Y-%m-%dT%H:%M:%SZ"),
+  "detention_book_out_date_time" = col_datetime(format =  "%Y-%m-%dT%H:%M:%SZ"),
+  "stay_book_out_date_time" = col_datetime(format =  "%Y-%m-%dT%H:%M:%SZ"),
+)
+
+det_head <- read_delim(here('write', 'input', 'headcount_fy12-24ytd.csv.gz'),
+                       delim = '|')
+det_all <- read_delim(here('write', 'input', 'ice_detentions_fy12-24ytd.csv.gz'),
+                      delim = '|',
+                      col_types = date_formats)
+det_unique <- read_delim(here('write', 'input', 'ice_unique_stays_fy12-24ytd.csv.gz'),
+                         delim = '|',
+                         col_types = date_formats)
 
 # Supplemental data
 
